@@ -287,6 +287,29 @@ async function initializeDatabase() {
       `);
     }
 
+
+    // טבלת קטגוריות מוצרים
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS categories (
+        id SERIAL PRIMARY KEY,
+        value VARCHAR(100) NOT NULL UNIQUE,
+        label VARCHAR(255) NOT NULL,
+        sort_order INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // הוסף ערכי ברירת מחדל אם הטבלה ריקה
+    const catCount = await client.query('SELECT COUNT(*) FROM categories');
+    if (parseInt(catCount.rows[0].count) === 0) {
+      await client.query(`
+        INSERT INTO categories (value, label, sort_order) VALUES
+        ('שקעים', 'שקעים חכמים', 1),
+        ('מתגים', 'מתגים חכמים', 2),
+        ('בקרים', 'בקרים', 3)
+      `);
+    }
+
     // טבלת טוקנים לאיפוס סיסמה
     await client.query(`
       CREATE TABLE IF NOT EXISTS password_reset_tokens (
@@ -1856,6 +1879,45 @@ app.post('/api/admin/product-types', authenticateToken, requireAdmin, async (req
 app.delete('/api/admin/product-types/:value', authenticateToken, requireAdmin, async (req, res) => {
   try {
     await pool.query('DELETE FROM product_types WHERE value = $1', [req.params.value]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'שגיאה במחיקה' });
+  }
+});
+
+
+// ===== קטגוריות =====
+
+// קבלת כל הקטגוריות (ציבורי)
+app.get('/api/categories', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM categories ORDER BY sort_order, id');
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: 'שגיאה בטעינת קטגוריות' });
+  }
+});
+
+// הוספת קטגוריה (admin)
+app.post('/api/admin/categories', authenticateToken, requireAdmin, async (req, res) => {
+  const { value, label } = req.body;
+  if (!value || !label) return res.status(400).json({ error: 'חסר value או label' });
+  try {
+    const result = await pool.query(
+      'INSERT INTO categories (value, label) VALUES ($1, $2) RETURNING *',
+      [value, label]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'קטגוריה זו כבר קיימת' });
+    res.status(500).json({ error: 'שגיאה בהוספה' });
+  }
+});
+
+// מחיקת קטגוריה (admin)
+app.delete('/api/admin/categories/:value', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM categories WHERE value = $1', [req.params.value]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'שגיאה במחיקה' });
