@@ -8,75 +8,36 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
 
-// Email setup - Resend or nodemailer
-let emailService = null;
-let useResend = false;
-
-// Try Resend first (recommended for Railway)
-if (process.env.RESEND_API_KEY) {
-  try {
-    const { Resend } = require('resend');
-    emailService = new Resend(process.env.RESEND_API_KEY);
-    useResend = true;
-    console.log('✅ Resend configured');
-  } catch (err) {
-    console.error('❌ Resend configuration failed:', err.message);
-  }
-}
-
-// Fallback to nodemailer if Resend not available
-let transporter;
-if (!useResend) {
-  try {
-    const nodemailer = require('nodemailer');
-    console.log('✅ nodemailer loaded');
-    
-    const smtpPort = parseInt(process.env.SMTP_PORT) || 587;
-    const useSSL = smtpPort === 465;
-    
-    transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtppro.zoho.com',
-      port: smtpPort,
-      secure: useSSL,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS
-      },
-      tls: {
-        rejectUnauthorized: false
-      }
-    });
-    console.log(`✅ nodemailer configured: ${process.env.SMTP_HOST || 'smtppro.zoho.com'}:${smtpPort} (SSL: ${useSSL})`);
-  } catch (err) {
-    console.error('❌ nodemailer configuration failed:', err.message);
-    console.warn('⚠️ Email functionality will be disabled');
-  }
-}
-
-// Helper function to send emails
+// Email setup - ZeptoMail
 async function sendEmail({ to, subject, text, attachments = [] }) {
-  if (useResend && emailService) {
-    // Resend doesn't support attachments in the same way
-    // Convert text to html for better formatting
-    const html = text.replace(/\n/g, '<br>');
-    
-    return await emailService.emails.send({
-      from: 'info@ecodos.co.il',
-      to: to,
-      subject: subject,
-      html: html
-    });
-  } else if (transporter) {
-    return await transporter.sendMail({
-      from: process.env.SMTP_USER || 'info@ecodos.co.il',
-      to: to,
-      subject: subject,
-      text: text,
-      attachments: attachments
-    });
-  } else {
-    throw new Error('No email service configured');
+  const token = process.env.ZEPTOMAIL_TOKEN;
+  if (!token) throw new Error('ZEPTOMAIL_TOKEN not configured');
+
+  const html = text.replace(/\n/g, '<br>');
+
+  const body = {
+    from: { address: 'info@ecodos.co.il', name: 'ECODOS' },
+    to: [{ email_address: { address: to } }],
+    subject: subject,
+    htmlbody: html
+  };
+
+  const response = await fetch('https://api.zeptomail.com/v1.1/email', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Zoho-enczapikey ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`ZeptoMail error: ${err}`);
   }
+
+  console.log(`✅ מייל נשלח ל-${to}`);
+  return await response.json();
 }
 
 const app = express();
