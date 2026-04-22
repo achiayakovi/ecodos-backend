@@ -262,6 +262,31 @@ async function initializeDatabase() {
       END $$;
     `);
 
+
+    // טבלת סוגי מוצר לתפריט אחריות
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS product_types (
+        id SERIAL PRIMARY KEY,
+        value VARCHAR(100) NOT NULL UNIQUE,
+        label VARCHAR(255) NOT NULL,
+        sort_order INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // הוסף ערכי ברירת מחדל אם הטבלה ריקה
+    const ptCount = await client.query('SELECT COUNT(*) FROM product_types');
+    if (parseInt(ptCount.rows[0].count) === 0) {
+      await client.query(`
+        INSERT INTO product_types (value, label, sort_order) VALUES
+        ('hub', 'בקר ECODOS Hub', 1),
+        ('outlet', 'שקע חכם Type H', 2),
+        ('switch1', 'מתג חכם 1 כנף', 3),
+        ('switch2', 'מתג חכם 2 כנפיים', 4),
+        ('boiler', 'לוח בקרת דוד', 5)
+      `);
+    }
+
     // טבלת טוקנים לאיפוס סיסמה
     await client.query(`
       CREATE TABLE IF NOT EXISTS password_reset_tokens (
@@ -1798,6 +1823,45 @@ app.use((err, req, res, next) => {
 });
 
 // הפעלת השרת
+
+// ===== סוגי מוצר =====
+
+// קבלת כל סוגי המוצר (ציבורי)
+app.get('/api/product-types', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM product_types ORDER BY sort_order, id');
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: 'שגיאה בטעינת סוגי מוצר' });
+  }
+});
+
+// הוספת סוג מוצר (admin)
+app.post('/api/admin/product-types', authenticateToken, requireAdmin, async (req, res) => {
+  const { value, label } = req.body;
+  if (!value || !label) return res.status(400).json({ error: 'חסר value או label' });
+  try {
+    const result = await pool.query(
+      'INSERT INTO product_types (value, label) VALUES ($1, $2) RETURNING *',
+      [value, label]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'ערך זה כבר קיים' });
+    res.status(500).json({ error: 'שגיאה בהוספה' });
+  }
+});
+
+// מחיקת סוג מוצר (admin)
+app.delete('/api/admin/product-types/:value', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM product_types WHERE value = $1', [req.params.value]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'שגיאה במחיקה' });
+  }
+});
+
 app.listen(PORT, async () => {
   console.log(`🚀 Server running on port ${PORT}`);
   await initializeDatabase();
