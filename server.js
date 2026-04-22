@@ -62,7 +62,7 @@ app.use(express.json({ limit: '10mb' }));
 // Rate limiting - הגבלת קצב בקשות
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 דקות
-  max: 100, // מקסימום 100 בקשות לכל IP
+  max: 500, // מקסימום 100 בקשות לכל IP
   standardHeaders: true,
   legacyHeaders: false,
   validate: { xForwardedForHeader: false }
