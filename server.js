@@ -248,6 +248,20 @@ async function initializeDatabase() {
       END $$;
     `);
 
+
+    // הוספת עמודת product_type לאחריות אם לא קיימת
+    await client.query(`
+      DO $$ 
+      BEGIN 
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name='warranties' AND column_name='product_type'
+        ) THEN
+          ALTER TABLE warranties ADD COLUMN product_type VARCHAR(100);
+        END IF;
+      END $$;
+    `);
+
     // טבלת טוקנים לאיפוס סיסמה
     await client.query(`
       CREATE TABLE IF NOT EXISTS password_reset_tokens (
@@ -1048,7 +1062,7 @@ app.get('/api/user/warranties', authenticateToken, async (req, res) => {
 
 // רישום אחריות חדשה (ציבורי או מחובר)
 app.post('/api/warranty/register', async (req, res) => {
-  const { machineNumber, fullName, phone, purchaseDate, receipt, receiptName, receiptType, website } = req.body;
+  const { machineNumber, fullName, phone, purchaseDate, receipt, receiptName, receiptType, website, productType } = req.body;
 
   // אנטי-ספאם: בדיקת honeypot
   if (website && website !== '') {
@@ -1098,7 +1112,7 @@ app.post('/api/warranty/register', async (req, res) => {
         status, user_id, receipt_filename) 
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
        RETURNING *`,
-      [machineNumber, purchase, fullName, phone, expiry, 'ממתין לאישור', userId, receiptName]
+      [machineNumber, purchase, fullName, phone, expiry, 'ממתין לאישור', userId, receiptName, productType]
     );
 
     const warrantyId = result.rows[0].id;
@@ -1194,7 +1208,7 @@ app.get('/api/warranty/check/:machineNumber', async (req, res) => {
 
   try {
     const result = await pool.query(
-      'SELECT * FROM warranties WHERE serial_number = $1',
+      'SELECT id, serial_number, purchase_date, customer_name, customer_phone, expiry_date, status, registration_date, product_type FROM warranties WHERE serial_number = $1',
       [machineNumber]
     );
 
