@@ -1020,7 +1020,20 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
         );
       }
     }
-
+// שליחת מייל ללקוח ולאדמין
+    const userEmailResult = await client.query('SELECT email, full_name FROM users WHERE id = $1', [req.user.id]);
+    const userEmail = userEmailResult.rows[0];
+    const itemsList = items.map(i => `${i.name} x${i.quantity} — ₪${i.price}`).join('\n');
+    sendEmail({
+      to: userEmail.email,
+      subject: `אישור הזמנה #${order.id} - ECODOS`,
+      text: `שלום ${userEmail.full_name},\n\nהזמנתך התקבלה ואנחנו בטיפול!\n\nמספר הזמנה: ${order.id}\n\nפריטים:\n${itemsList}\n\nסכום כולל: ₪${total_amount}\n\nניצור איתך קשר בקרוב.\n\nתודה,\nצוות ECODOS`
+    }).catch(console.error);
+    sendEmail({
+      to: 'info@ecodos.co.il',
+      subject: `הזמנה חדשה #${order.id} - ${userEmail.full_name}`,
+      text: `התקבלה הזמנה חדשה!\n\nלקוח: ${userEmail.full_name}\nאימייל: ${userEmail.email}\n\nפריטים:\n${itemsList}\n\nסכום: ₪${total_amount}`
+    }).catch(console.error);
     await client.query('COMMIT');
     res.status(201).json(order);
   } catch (err) {
