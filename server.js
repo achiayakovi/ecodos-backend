@@ -942,7 +942,7 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
         [item.product_id]
       );
       if (productResult.rows.length === 0) {
-        throw new Error(`מוצר ${item.product_id} לא נמצא`);
+throw new Error(`המוצר שהוספת לעגלה כבר לא קיים. אנא הסר אותו ונסה שוב.`);
       }
       const product = productResult.rows[0];
       if (product.stock_quantity < item.quantity) {
