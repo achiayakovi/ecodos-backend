@@ -1923,6 +1923,22 @@ app.delete('/api/admin/categories/:value', authenticateToken, requireAdmin, asyn
     res.status(500).json({ error: 'שגיאה במחיקה' });
   }
 });
+// צור קשר
+app.post('/api/contact', async (req, res) => {
+  const { name, phone, email, message } = req.body;
+  if (!name || !email) return res.status(400).json({ error: 'חסרים פרטים' });
+  try {
+    await sendEmail({
+      to: 'info@ecodos.co.il',
+      subject: `פנייה חדשה מאתר ECODOS - ${name}`,
+      text: `שם: ${name}\nטלפון: ${phone || '-'}\nאימייל: ${email}\n\nהודעה:\n${message || '-'}`
+    });
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'שגיאה בשליחה' });
+  }
+});
 
 app.listen(PORT, async () => {
   console.log(`🚀 Server running on port ${PORT}`);
